@@ -115,7 +115,7 @@ export default function createJITI(
   const tryResolve = (id: string, options?: { paths?: string[] }) => {
     try {
       return nativeRequire.resolve(id, options);
-    } catch {}
+    } catch { }
   };
 
   const _url = pathToFileURL(_filename);
@@ -222,9 +222,9 @@ export default function createJITI(
         babel: {
           ...(opts.sourceMaps
             ? {
-                sourceFileName: topts.filename,
-                sourceMaps: "inline",
-              }
+              sourceFileName: topts.filename,
+              sourceMaps: "inline",
+            }
             : {}),
           ...opts.transformOptions?.babel,
         },
@@ -253,35 +253,26 @@ export default function createJITI(
       id = id.slice(5);
     } else if (id.startsWith("file:")) {
       id = fileURLToPath(id);
-    } else if (id.startsWith("data:")) {     
+    } else if (id.startsWith("data:")) {
       //Decode data-url
       const mime = id.split(",")[0].split(";")[0].split(":")[1];
       const encoding = (id.split(",")[0].split(";")[1] ?? "utf8") as BufferEncoding;
-      const data = id.split(",")[1];
+      const body = decodeURIComponent(id.split(",")[1]);
 
       const ts = mime.includes("typescript");
-      let source = decodeURIComponent(Buffer.from(data, encoding).toString("utf8"))
+      const js = mime.includes("javascript");
+      if (!ts && !js) {
+        throw new Error("Invalid mime type");
+      }
 
-      console.log("source",  source);
+      const source = Buffer.from(body, encoding).toString("utf8")
 
-      source = transform({ filename : undefined, source, ts });
-
-      const mod = new Module("");
-      
-      const compiled = vm.runInThisContext(Module.wrap(source), {
-        lineOffset: 0,
-        displayErrors: false,
-      });
-
-      compiled(
-        mod.exports,
-        mod.require,
-        mod,
-        undefined, //filename -> doesn't make sense for data-url,
-        undefined, //dirname -> doesn't make sense for data-url,
-      )
-
-      return _interopDefault(mod.exports);
+      return evalModule(source, {
+        id: id,
+        filename: id,
+        ext: ts ? ".ts" : ".mjs",
+        cache
+      })
     }
 
     // Check for builtin node module like fs
@@ -400,19 +391,23 @@ export default function createJITI(
       }
     }
 
-    mod.require = createJITI(filename, opts, mod, cache);
+    //These don't make sens for data urls
+    if (!id.startsWith("data:")) {
+      mod.require = createJITI(filename, opts, mod, cache);
 
-    // @ts-ignore
-    mod.path = dirname(filename);
+      // @ts-ignore
+      mod.path = dirname(filename);
 
-    // @ts-ignore
-    mod.paths = Module._nodeModulePaths(mod.path);
+      // @ts-ignore
+      mod.paths = Module._nodeModulePaths(mod.path);
 
-    // Set CJS cache before eval
-    cache[filename] = mod;
-    if (opts.requireCache) {
-      nativeRequire.cache[filename] = mod;
+      // Set CJS cache before eval
+      cache[filename] = mod;
+      if (opts.requireCache) {
+        nativeRequire.cache[filename] = mod;
+      }
     }
+
 
     // Compile wrapped script
     let compiled;
