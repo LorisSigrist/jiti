@@ -255,35 +255,30 @@ export default function createJITI(
       id = fileURLToPath(id);
     } else if (id.startsWith("data:")) {     
       //Decode data-url
-      const data = id.split(",")[1];
       const mime = id.split(",")[0].split(";")[0].split(":")[1];
       const encoding = id.split(",")[0].split(";")[1] ?? "utf8";
-      console.log("mime", mime);
-      console.log("encoding", encoding);
+      const data = id.split(",")[1];
 
       const ts = mime.includes("typescript");
-     
       let source = encoding === "base64" ?  Buffer.from(data,  "base64").toString("utf8") : decodeURIComponent(data);
       source = transform({ filename : undefined, source, ts });
 
       const mod = new Module("");
-      mod.filename = "/User/sigrist/dev/jiti/test.mjs";
-
-      let context = vm.createContext();
       
-      const compiled = vm.runInThisContext(Module.wrap(source), context);
+      const compiled = vm.runInThisContext(Module.wrap(source), {
+        lineOffset: 0,
+        displayErrors: false,
+      });
+
       compiled(
         mod.exports,
         mod.require,
         mod,
-        mod.filename,
-        dirname(mod.filename),
+        undefined, //filename -> doesn't make sense for data-url,
+        undefined, //dirname -> doesn't make sense for data-url,
       )
 
-      const _exports = _interopDefault(mod.exports);
-
-      return _exports;
-      //return evalModule(source, { id: undefined, filename: "test.mjs", ext: ".mjs", cache });
+      return _interopDefault(mod.exports);
     }
 
     // Check for builtin node module like fs
@@ -368,8 +363,6 @@ export default function createJITI(
         isTransformRe.test(filename) ||
         hasESMSyntax(source) ||
         (opts.legacy && detectLegacySyntax(source)));
-    
-    console.log("needsTranspile", needsTranspile);
 
     const start = performance.now();
     if (needsTranspile) {
