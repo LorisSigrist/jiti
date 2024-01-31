@@ -253,6 +253,37 @@ export default function createJITI(
       id = id.slice(5);
     } else if (id.startsWith("file:")) {
       id = fileURLToPath(id);
+    } else if (id.startsWith("data:")) {     
+      //Decode data-url
+      const data = id.split(",")[1];
+      const mime = id.split(",")[0].split(";")[0].split(":")[1];
+      const encoding = id.split(",")[0].split(";")[1] ?? "utf8";
+      console.log("mime", mime);
+      console.log("encoding", encoding);
+
+      const ts = mime.includes("typescript");
+     
+      let source = encoding === "base64" ?  Buffer.from(data,  "base64").toString("utf8") : decodeURIComponent(data);
+      source = transform({ filename : undefined, source, ts });
+
+      const mod = new Module("");
+      mod.filename = "/User/sigrist/dev/jiti/test.mjs";
+
+      let context = vm.createContext();
+      
+      const compiled = vm.runInThisContext(Module.wrap(source), context);
+      compiled(
+        mod.exports,
+        mod.require,
+        mod,
+        mod.filename,
+        dirname(mod.filename),
+      )
+
+      const _exports = _interopDefault(mod.exports);
+
+      return _exports;
+      //return evalModule(source, { id: undefined, filename: "test.mjs", ext: ".mjs", cache });
     }
 
     // Check for builtin node module like fs
@@ -337,6 +368,8 @@ export default function createJITI(
         isTransformRe.test(filename) ||
         hasESMSyntax(source) ||
         (opts.legacy && detectLegacySyntax(source)));
+    
+    console.log("needsTranspile", needsTranspile);
 
     const start = performance.now();
     if (needsTranspile) {
