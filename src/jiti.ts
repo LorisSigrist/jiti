@@ -256,11 +256,14 @@ export default function createJITI(
     } else if (id.startsWith("data:")) {     
       //Decode data-url
       const mime = id.split(",")[0].split(";")[0].split(":")[1];
-      const encoding = id.split(",")[0].split(";")[1] ?? "utf8";
+      const encoding = (id.split(",")[0].split(";")[1] ?? "utf8") as BufferEncoding;
       const data = id.split(",")[1];
 
       const ts = mime.includes("typescript");
-      let source = encoding === "base64" ?  Buffer.from(data,  "base64").toString("utf8") : decodeURIComponent(data);
+      let source = decodeURIComponent(Buffer.from(data, encoding).toString("utf8"))
+
+      console.log("source",  source);
+
       source = transform({ filename : undefined, source, ts });
 
       const mod = new Module("");
